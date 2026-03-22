@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { connectToDatabase } from "@/backend/config/database";
+import { uploadPngDataUriToCloudinary } from "@/backend/modules/tenant/cloudinary";
 import { tenantService } from "@/backend/modules/tenant/tenant.service";
 import { isAppError } from "@/backend/shared/errors";
 import { UserRole } from "@/backend/shared/types";
@@ -60,6 +61,26 @@ export async function PUT(request: Request) {
 
     const body = await request.json();
     const input = updateCompanySchema.parse(body);
+
+    if (input.signature?.image?.startsWith("data:image/png;base64,")) {
+      const uploaded = await uploadPngDataUriToCloudinary({
+        dataUri: input.signature.image,
+        tenantId,
+        assetKind: "signature",
+      });
+
+      input.signature.image = uploaded.secureUrl;
+    }
+
+    if (input.stamp?.image?.startsWith("data:image/png;base64,")) {
+      const uploaded = await uploadPngDataUriToCloudinary({
+        dataUri: input.stamp.image,
+        tenantId,
+        assetKind: "stamp",
+      });
+
+      input.stamp.image = uploaded.secureUrl;
+    }
 
     const tenant = await tenantService.updateById(tenantId, input);
     return NextResponse.json({ data: tenant });

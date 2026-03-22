@@ -159,12 +159,15 @@ export function parseFiscalInvoiceText(rawText: string): OcrExtractionResult {
   const derivedBase = parsedBase ?? (parsedIva ? Number((parsedIva / (defaultTaxRate / 100)).toFixed(2)) : undefined);
   const derivedIva = parsedIva ?? (parsedBase ? Number((parsedBase * (defaultTaxRate / 100)).toFixed(2)) : undefined);
 
+  // Fallback: if no explicit CONTROL label was found, use the code next to MH (fiscal printer control number)
+  const controlNumber = controlMatch?.[2] ?? machineMatch?.[2];
+
   return {
     rawText,
     providerRif: rifValue,
     providerName: inferProviderName(lines, rifLineIndex),
     invoiceNumber,
-    controlNumber: controlMatch?.[2],
+    controlNumber,
     machineSerial: machineMatch?.[2],
     invoiceDate: normalizeDate(dateMatch?.[1] ?? shortDateMatch?.[1]),
     taxBase: derivedBase,

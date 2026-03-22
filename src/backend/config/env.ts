@@ -6,6 +6,10 @@ const envSchema = z.object({
   // without requiring runtime-only secrets.
   MONGODB_URI: z.string().min(1).optional(),
   OCR_PROVIDER: z.enum(["tesseract", "openai", "google-vision"]).default("tesseract"),
+  CLOUDINARY_CLOUD_NAME: z.string().min(1).optional(),
+  CLOUDINARY_API_KEY: z.string().min(1).optional(),
+  CLOUDINARY_API_SECRET: z.string().min(1).optional(),
+  CLOUDINARY_UPLOAD_FOLDER: z.string().min(1).default("fiscalsnap"),
 });
 
 export const env = envSchema.parse(process.env);

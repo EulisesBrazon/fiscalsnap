@@ -2,12 +2,35 @@ import { Types } from "mongoose";
 
 import { AppError } from "@/backend/shared/errors";
 
-import { defaultRetentionTemplate } from "./template.seed";
+import { defaultRetentionTemplate, exclusiveLandscapeRetentionTemplate } from "./template.seed";
 import { PdfTemplateModel } from "./template.model";
 import { TemplateRevisionModel } from "./template-revision.model";
 import type { PdfTemplateDefinition } from "./pdf.types";
 
+const EXCLUSIVE_LANDSCAPE_TEMPLATE_TENANT_ID = "69c0174c26cc9a9a1685b10d";
+
 class TemplateService {
+  private getSeedTemplateForTenant(tenantId: string): PdfTemplateDefinition {
+    return tenantId === EXCLUSIVE_LANDSCAPE_TEMPLATE_TENANT_ID
+      ? exclusiveLandscapeRetentionTemplate
+      : defaultRetentionTemplate;
+  }
+
+  private shouldUpgradeLegacyDefaultTemplate(template: {
+    name: string;
+    definition: unknown;
+  }): boolean {
+    if (template.name !== exclusiveLandscapeRetentionTemplate.name) return false;
+
+    const definition = template.definition as { info?: { subject?: string } } | undefined;
+    if (!definition || typeof definition !== "object") return true;
+
+    const seedSubject = (
+      exclusiveLandscapeRetentionTemplate.definition as { info?: { subject?: string } }
+    ).info?.subject;
+    return definition.info?.subject !== seedSubject;
+  }
+
   private async createRevisionSnapshot(
     input: {
       tenantId: string;
@@ -57,16 +80,44 @@ class TemplateService {
   }
 
   async getDefaultTemplate(tenantId: string) {
+    const defaultTemplateSeed = this.getSeedTemplateForTenant(tenantId);
     let template = await PdfTemplateModel.findOne({ tenantId, isDefault: true, isActive: true });
 
     if (!template) {
       template = await PdfTemplateModel.create({
         tenantId,
-        ...defaultRetentionTemplate,
+        ...defaultTemplateSeed,
         isDefault: true,
         isActive: true,
         version: 1,
       });
+
+      return template;
+    }
+
+    if (tenantId === EXCLUSIVE_LANDSCAPE_TEMPLATE_TENANT_ID && this.shouldUpgradeLegacyDefaultTemplate(template)) {
+      template.description = exclusiveLandscapeRetentionTemplate.description;
+      template.definition = exclusiveLandscapeRetentionTemplate.definition;
+      template.variables = exclusiveLandscapeRetentionTemplate.variables;
+      template.version += 1;
+      await template.save();
+
+      await this.createRevisionSnapshot(
+        {
+          tenantId,
+          templateId: String(template._id),
+          version: template.version,
+          name: template.name,
+          description: template.description,
+          definition: template.definition as Record<string, unknown>,
+          variables: template.variables.map((item: { key: string; label: string; source: string }) => ({
+            key: item.key,
+            label: item.label,
+            source: item.source,
+          })),
+        },
+        "updated",
+      );
     }
 
     return template;

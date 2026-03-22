@@ -146,12 +146,12 @@ export function CompanySettingsClient({ canEdit }: CompanySettingsClientProps) {
         </div>
 
         {signatureType === "upload" ? (
-          <ImageUpload disabled={!canEdit} label="Firma" initialImage={signatureImage} onChange={(value) => setSignatureImage(value)} />
+          <ImageUpload disabled={!canEdit} label="Firma" assetKind="signature" initialImage={signatureImage} onChange={(value) => setSignatureImage(value)} />
         ) : (
           <SignatureCanvas disabled={!canEdit} initialImage={signatureImage} onChange={(value) => setSignatureImage(value)} />
         )}
 
-        <ImageUpload disabled={!canEdit} label="Sello" initialImage={stampImage} onChange={(value) => setStampImage(value)} />
+        <ImageUpload disabled={!canEdit} label="Sello" assetKind="stamp" initialImage={stampImage} onChange={(value) => setStampImage(value)} />
 
         <button disabled={saving || !canEdit} onClick={saveCompany} type="button" className="h-10 w-full rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60">
           {saving ? "Guardando..." : "Guardar cambios"}

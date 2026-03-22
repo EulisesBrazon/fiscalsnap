@@ -2,34 +2,64 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { getApiErrorMessage } from "@/lib/api-errors";
 
 type ImageUploadProps = {
   label: string;
   onChange: (value: string) => void;
   initialImage?: string;
   disabled?: boolean;
+  assetKind?: "signature" | "stamp";
 };
 
-export function ImageUpload({ label, onChange, initialImage, disabled = false }: ImageUploadProps) {
+export function ImageUpload({ label, onChange, initialImage, disabled = false, assetKind = "signature" }: ImageUploadProps) {
   const [preview, setPreview] = useState(initialImage ?? "");
+  const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState("");
 
   async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result ?? "");
-      setPreview(result);
-      onChange(result);
+    if (file.type !== "image/png") {
+      setMessage("Solo se permiten archivos PNG.");
+      return;
+    }
+
+    setUploading(true);
+    setMessage("Subiendo imagen...");
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("assetKind", assetKind);
+
+    const response = await fetch("/api/company/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const payload = (await response.json()) as {
+      data?: { url?: string };
+      message?: string;
+      errors?: Record<string, string[]>;
     };
-    reader.readAsDataURL(file);
+
+    if (!response.ok || !payload.data?.url) {
+      setMessage(getApiErrorMessage(payload, "No se pudo subir la imagen."));
+      setUploading(false);
+      return;
+    }
+
+    setPreview(payload.data.url);
+    onChange(payload.data.url);
+    setMessage("Imagen subida correctamente.");
+    setUploading(false);
   }
 
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium">{label}</label>
-      <input disabled={disabled} type="file" accept="image/png,image/jpeg" onChange={handleFile} className="block w-full text-sm disabled:opacity-60" />
+      <input disabled={disabled || uploading} type="file" accept="image/png" onChange={handleFile} className="block w-full text-sm disabled:opacity-60" />
       {preview ? (
         <Image
           src={preview}
@@ -40,6 +70,7 @@ export function ImageUpload({ label, onChange, initialImage, disabled = false }:
           className="max-h-28 w-auto rounded-md border bg-white p-2"
         />
       ) : null}
+      {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}
     </div>
   );
 }

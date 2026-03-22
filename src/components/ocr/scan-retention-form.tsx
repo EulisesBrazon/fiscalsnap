@@ -29,6 +29,63 @@ type RetentionResult = {
   _id: string;
 };
 
+type FormFieldKey =
+  | "providerId"
+  | "providerRif"
+  | "providerName"
+  | "invoiceNumber"
+  | "controlNumber"
+  | "invoiceDate"
+  | "machineSerial"
+  | "taxBase"
+  | "retentionPercentage";
+
+type FormFieldErrors = Partial<Record<FormFieldKey, string>>;
+
+const FIELD_LABELS: Record<FormFieldKey, string> = {
+  providerId: "Proveedor existente",
+  providerRif: "RIF proveedor",
+  providerName: "Nombre proveedor",
+  invoiceNumber: "Nro factura",
+  controlNumber: "Nro control",
+  invoiceDate: "Fecha factura",
+  machineSerial: "Serial máquina (MH/Z)",
+  taxBase: "Base imponible",
+  retentionPercentage: "% retención",
+};
+
+function getFirstErrorMessage(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    const first = value.find((item) => typeof item === "string" && item.trim().length > 0);
+    return typeof first === "string" ? first : null;
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+
+  return null;
+}
+
+function mapApiErrorsToFormFields(errors: unknown): FormFieldErrors {
+  if (!errors || typeof errors !== "object") {
+    return {};
+  }
+
+  const mapped: FormFieldErrors = {};
+  for (const [rawKey, rawValue] of Object.entries(errors as Record<string, unknown>)) {
+    const message = getFirstErrorMessage(rawValue);
+    if (!message) continue;
+
+    const field = rawKey as FormFieldKey;
+    if (field in FIELD_LABELS) {
+      mapped[field] = message;
+    }
+  }
+
+  return mapped;
+}
+
 export function ScanRetentionForm({ providers }: { providers: Provider[] }) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -44,10 +101,11 @@ export function ScanRetentionForm({ providers }: { providers: Provider[] }) {
   const [providerName, setProviderName] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [controlNumber, setControlNumber] = useState("");
-  const [invoiceDate, setInvoiceDate] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [machineSerial, setMachineSerial] = useState("");
   const [taxBase, setTaxBase] = useState<string>("0");
   const [retentionPercentage, setRetentionPercentage] = useState<"75" | "100">("75");
+  const [fieldErrors, setFieldErrors] = useState<FormFieldErrors>({});
 
   const existingProviderFromRif = useMemo(
     () => providers.find((item) => item.rif.toUpperCase() === providerRif.trim().toUpperCase()),
@@ -57,13 +115,56 @@ export function ScanRetentionForm({ providers }: { providers: Provider[] }) {
   const busy = ocrBusy || emitBusy;
   const parsedTaxBase = Number(taxBase);
   const hasValidInvoiceDate = /^\d{4}-\d{2}-\d{2}$/.test(invoiceDate.trim());
-  const canEmit =
-    !busy &&
-    invoiceNumber.trim().length > 0 &&
-    controlNumber.trim().length > 0 &&
-    hasValidInvoiceDate &&
-    Number.isFinite(parsedTaxBase) &&
-    parsedTaxBase > 0;
+  const canEmit = !busy;
+
+  function inputClassName(field: FormFieldKey): string {
+    const hasError = Boolean(fieldErrors[field]);
+    return `h-10 w-full rounded-md border bg-background px-3 text-sm ${
+      hasError ? "border-red-500 focus-visible:outline-red-500" : ""
+    }`;
+  }
+
+  function clearFieldError(field: FormFieldKey) {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validateClientFields(): FormFieldErrors {
+    const errors: FormFieldErrors = {};
+
+    if (!invoiceNumber.trim()) {
+      errors.invoiceNumber = "Debes indicar el número de factura.";
+    }
+
+    if (!controlNumber.trim()) {
+      errors.controlNumber = "Debes indicar el número de control.";
+    }
+
+    if (!invoiceDate.trim()) {
+      errors.invoiceDate = "Debes indicar la fecha de la factura.";
+    } else if (!hasValidInvoiceDate) {
+      errors.invoiceDate = "La fecha debe tener formato válido (YYYY-MM-DD).";
+    }
+
+    if (!Number.isFinite(parsedTaxBase) || parsedTaxBase <= 0) {
+      errors.taxBase = "La base imponible debe ser mayor a 0.";
+    }
+
+    if (!providerId && !existingProviderFromRif) {
+      if (!providerRif.trim()) {
+        errors.providerRif = "Debes indicar el RIF del proveedor.";
+      }
+      if (!providerName.trim()) {
+        errors.providerName = "Debes indicar el nombre del proveedor.";
+      }
+    }
+
+    return errors;
+  }
 
   function emitDisabledReason(): string {
     if (ocrBusy) return "El OCR sigue procesando la imagen. Espera a que finalice.";
@@ -91,6 +192,7 @@ export function ScanRetentionForm({ providers }: { providers: Provider[] }) {
 
     setOcrBusy(true);
     setMessage("");
+    setFieldErrors({});
     setSelectedImageName(file.name);
 
     try {
@@ -139,6 +241,11 @@ export function ScanRetentionForm({ providers }: { providers: Provider[] }) {
     }
 
     if (!providerRif || !providerName) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        ...(providerRif ? {} : { providerRif: "Debes indicar el RIF del proveedor." }),
+        ...(providerName ? {} : { providerName: "Debes indicar el nombre del proveedor." }),
+      }));
       setMessage("Debes seleccionar o crear un proveedor.");
       return null;
     }
@@ -159,31 +266,14 @@ export function ScanRetentionForm({ providers }: { providers: Provider[] }) {
   }
 
   async function emitRetention() {
-    if (!invoiceNumber.trim()) {
-      setMessage("Debes indicar el numero de factura.");
+    const clientErrors = validateClientFields();
+    if (Object.keys(clientErrors).length > 0) {
+      setFieldErrors(clientErrors);
+      setMessage("Revisa los campos marcados en rojo para poder emitir la retención.");
       return;
     }
 
-    if (!controlNumber.trim()) {
-      setMessage("Debes indicar el numero de control.");
-      return;
-    }
-
-    if (!invoiceDate.trim()) {
-      setMessage("Debes indicar la fecha de la factura.");
-      return;
-    }
-
-    if (!hasValidInvoiceDate) {
-      setMessage("La fecha de la factura debe estar en formato YYYY-MM-DD.");
-      return;
-    }
-
-    if (!Number.isFinite(parsedTaxBase) || parsedTaxBase <= 0) {
-      setMessage("La base imponible debe ser mayor a 0.");
-      return;
-    }
-
+    setFieldErrors({});
     setEmitBusy(true);
     setMessage("Emitiendo comprobante...");
 
@@ -208,20 +298,18 @@ export function ScanRetentionForm({ providers }: { providers: Provider[] }) {
 
       const payload = (await response.json()) as { data?: RetentionResult; message?: string; errors?: Record<string, string[]> };
       if (!response.ok || !payload.data) {
+        const apiFieldErrors = mapApiErrorsToFormFields(payload.errors);
+        if (Object.keys(apiFieldErrors).length > 0) {
+          setFieldErrors(apiFieldErrors);
+          setMessage("Hay campos inválidos. Corrige los campos marcados en rojo.");
+          return;
+        }
+
         setMessage(getApiErrorMessage(payload, "No se pudo emitir la retención."));
         return;
       }
 
-      const detailUrl = `${window.location.origin}/dashboard/retentions/${payload.data._id}`;
-      const whatsappText = encodeURIComponent(`Comprobante de retención emitido. Detalle: ${detailUrl}`);
-      const whatsappUrl = `https://wa.me/?text=${whatsappText}`;
-
-      setMessage("Retención emitida con éxito. Puedes compartirla por WhatsApp o ver el detalle.");
-
-      const openWhatsapp = window.confirm("¿Deseas compartir el comprobante por WhatsApp ahora?");
-      if (openWhatsapp) {
-        window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-      }
+      setMessage("Retención emitida con éxito.");
 
       router.push(`/dashboard/retentions/${payload.data._id}`);
     } catch {
@@ -299,55 +387,131 @@ export function ScanRetentionForm({ providers }: { providers: Provider[] }) {
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Proveedor existente</label>
-            <select value={providerId} onChange={(event) => setProviderId(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
+            <select
+              value={providerId}
+              onChange={(event) => {
+                setProviderId(event.target.value);
+                clearFieldError("providerId");
+              }}
+              className={inputClassName("providerId")}
+            >
               <option value="">Seleccionar manualmente</option>
               {providers.map((item) => (
                 <option key={item._id} value={item._id}>{`${item.name} (${item.rif})`}</option>
               ))}
             </select>
+            {fieldErrors.providerId ? <p className="text-xs text-red-600">{fieldErrors.providerId}</p> : null}
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium">RIF proveedor</label>
-            <input value={providerRif} onChange={(event) => setProviderRif(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm" />
+            <input
+              value={providerRif}
+              onChange={(event) => {
+                setProviderRif(event.target.value);
+                clearFieldError("providerRif");
+              }}
+              className={inputClassName("providerRif")}
+            />
+            {fieldErrors.providerRif ? <p className="text-xs text-red-600">{fieldErrors.providerRif}</p> : null}
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">
             <label className="text-sm font-medium">Nombre proveedor</label>
-            <input value={providerName} onChange={(event) => setProviderName(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm" />
+            <input
+              value={providerName}
+              onChange={(event) => {
+                setProviderName(event.target.value);
+                clearFieldError("providerName");
+              }}
+              className={inputClassName("providerName")}
+            />
+            {fieldErrors.providerName ? <p className="text-xs text-red-600">{fieldErrors.providerName}</p> : null}
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Nro factura</label>
-            <input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm" />
+            <input
+              value={invoiceNumber}
+              onChange={(event) => {
+                setInvoiceNumber(event.target.value);
+                clearFieldError("invoiceNumber");
+              }}
+              className={inputClassName("invoiceNumber")}
+            />
+            {fieldErrors.invoiceNumber ? <p className="text-xs text-red-600">{fieldErrors.invoiceNumber}</p> : null}
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Nro control</label>
-            <input value={controlNumber} onChange={(event) => setControlNumber(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm" />
+            <input
+              value={controlNumber}
+              onChange={(event) => {
+                setControlNumber(event.target.value);
+                clearFieldError("controlNumber");
+              }}
+              className={inputClassName("controlNumber")}
+            />
+            {fieldErrors.controlNumber ? <p className="text-xs text-red-600">{fieldErrors.controlNumber}</p> : null}
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Fecha factura</label>
-            <input value={invoiceDate} type="date" onChange={(event) => setInvoiceDate(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm" />
+            <input
+              value={invoiceDate}
+              type="date"
+              onChange={(event) => {
+                setInvoiceDate(event.target.value);
+                clearFieldError("invoiceDate");
+              }}
+              className={inputClassName("invoiceDate")}
+            />
+            {fieldErrors.invoiceDate ? <p className="text-xs text-red-600">{fieldErrors.invoiceDate}</p> : null}
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Serial máquina (MH/Z)</label>
-            <input value={machineSerial} onChange={(event) => setMachineSerial(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm" />
+            <input
+              value={machineSerial}
+              onChange={(event) => {
+                setMachineSerial(event.target.value);
+                clearFieldError("machineSerial");
+              }}
+              className={inputClassName("machineSerial")}
+            />
+            {fieldErrors.machineSerial ? <p className="text-xs text-red-600">{fieldErrors.machineSerial}</p> : null}
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Base imponible</label>
-            <input value={taxBase} type="number" min={0} step="0.01" onChange={(event) => setTaxBase(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm" />
+            <input
+              value={taxBase}
+              type="number"
+              min={0}
+              step="0.01"
+              onChange={(event) => {
+                setTaxBase(event.target.value);
+                clearFieldError("taxBase");
+              }}
+              className={inputClassName("taxBase")}
+            />
+            {fieldErrors.taxBase ? <p className="text-xs text-red-600">{fieldErrors.taxBase}</p> : null}
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium">% retención</label>
-            <select value={retentionPercentage} onChange={(event) => setRetentionPercentage(event.target.value as "75" | "100")} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
+            <select
+              value={retentionPercentage}
+              onChange={(event) => {
+                setRetentionPercentage(event.target.value as "75" | "100");
+                clearFieldError("retentionPercentage");
+              }}
+              className={inputClassName("retentionPercentage")}
+            >
               <option value="75">75%</option>
               <option value="100">100%</option>
             </select>
+            {fieldErrors.retentionPercentage ? <p className="text-xs text-red-600">{fieldErrors.retentionPercentage}</p> : null}
           </div>
         </div>
 

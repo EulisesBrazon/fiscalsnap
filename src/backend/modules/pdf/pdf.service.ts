@@ -60,13 +60,23 @@ function replaceVariables(value: unknown, variables: Record<string, string>): un
   }
 
   if (Array.isArray(value)) {
-    return value.map((entry) => replaceVariables(entry, variables));
+    return value
+      .map((entry) => replaceVariables(entry, variables))
+      .filter((entry) => {
+        if (entry && typeof entry === "object" && "image" in entry) {
+          const node = entry as Record<string, unknown>;
+          if (!node.image && node._removable) return false;
+        }
+        return true;
+      });
   }
 
   if (value && typeof value === "object") {
-    return Object.fromEntries(
+    const result = Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, replaceVariables(v, variables)]),
     );
+    delete result._removable;
+    return result;
   }
 
   return value;
@@ -74,7 +84,44 @@ function replaceVariables(value: unknown, variables: Record<string, string>): un
 
 class PdfService {
   private toCurrency(value: number): string {
+    return new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
+
+  private toPercent(value: number): string {
     return value.toFixed(2);
+  }
+
+  private toDateDisplay(value: Date): string {
+    const day = String(value.getDate()).padStart(2, "0");
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const year = value.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  private toFiscalPeriod(value: Date): string {
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    return `${value.getFullYear()}-${month}`;
+  }
+
+  private async toPdfImageSource(value?: string): Promise<string> {
+    if (!value) return "";
+    if (value.startsWith("data:image/")) return value;
+    if (!/^https?:\/\//i.test(value)) return value;
+
+    try {
+      const response = await fetch(value);
+      if (!response.ok) return "";
+
+      const contentType = response.headers.get("content-type") ?? "image/png";
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const base64 = Buffer.from(bytes).toString("base64");
+      return `data:${contentType};base64,${base64}`;
+    } catch {
+      return "";
+    }
   }
 
   private async toBuffer(docDefinition: TDocumentDefinitions): Promise<Buffer> {
@@ -100,6 +147,11 @@ class PdfService {
       rif?: string;
     };
 
+    const issueDate = new Date();
+    const totalPurchases = retention.taxBase + retention.ivaAmount;
+    const signatureImage = await this.toPdfImageSource(tenant.signature?.image ?? "");
+    const stampImage = await this.toPdfImageSource(tenant.stamp?.image ?? "");
+
     const values: Record<string, string> = {
       agentName: tenant.name,
       agentRif: tenant.rif,
@@ -110,14 +162,23 @@ class PdfService {
       invoiceNumber: retention.invoiceNumber,
       controlNumber: retention.controlNumber,
       invoiceDate: retention.invoiceDate.toISOString().slice(0, 10),
+      invoiceDateDisplay: this.toDateDisplay(retention.invoiceDate),
       taxBase: this.toCurrency(retention.taxBase),
-      taxRate: this.toCurrency(retention.taxRate),
+      taxRate: this.toPercent(retention.taxRate),
       ivaAmount: this.toCurrency(retention.ivaAmount),
       retentionPercentage: String(retention.retentionPercentage),
       retentionAmount: this.toCurrency(retention.retentionAmount),
-      signatureImage: tenant.signature?.image ?? "",
-      stampImage: tenant.stamp?.image ?? "",
-      issueDate: new Date().toISOString().slice(0, 10),
+      totalPurchases: this.toCurrency(totalPurchases),
+      totalPurchasesNoCredit: "0.00",
+      debitNoteNumber: "",
+      creditNoteNumber: "",
+      affectedInvoiceNumber: "",
+      transactionType: "01-Reg",
+      fiscalPeriod: this.toFiscalPeriod(retention.invoiceDate),
+      signatureImage,
+      stampImage,
+      issueDate: issueDate.toISOString().slice(0, 10),
+      issueDateDisplay: this.toDateDisplay(issueDate),
     };
 
     const definition = replaceVariables(template.definition, values) as TDocumentDefinitions;
@@ -148,14 +209,23 @@ class PdfService {
       invoiceNumber: "F0003456",
       controlNumber: "MH-987654",
       invoiceDate: "2026-03-21",
+      invoiceDateDisplay: "21/03/2026",
       taxBase: "1500.00",
       taxRate: "16.00",
       ivaAmount: "240.00",
       retentionPercentage: "75",
       retentionAmount: "180.00",
+      totalPurchases: "1740.00",
+      totalPurchasesNoCredit: "0.00",
+      debitNoteNumber: "",
+      creditNoteNumber: "",
+      affectedInvoiceNumber: "",
+      transactionType: "01-Reg",
+      fiscalPeriod: "2026-03",
       signatureImage: "",
       stampImage: "",
       issueDate: "2026-03-21",
+      issueDateDisplay: "21/03/2026",
     };
 
     const definition = replaceVariables(template.definition, mockValues) as TDocumentDefinitions;

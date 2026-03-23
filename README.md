@@ -1,52 +1,104 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FiscalSnap
 
-## Getting Started
+Aplicación web para gestión de retenciones de IVA por tenant, con generación de comprobantes PDF, OCR de facturas y configuración de firma empresarial.
 
-First, run the development server:
+## Características principales
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Multi tenant por empresa (RIF), con usuarios y roles.
+- Autenticación con credenciales mediante NextAuth.
+- Módulo de proveedores y retenciones.
+- Generación de comprobantes PDF con template editable.
+- Previsualización de templates PDF.
+- Firma empresarial configurable desde Dashboard, cargada a Cloudinary.
+- Soporte de imágenes PNG, JPG y JPEG para firma.
+- Entrega de imagen con URL firmada para evitar exposición directa de assets.
+- Tema visual por tenant (modo y paleta de colores).
+- OCR de facturas (Tesseract por defecto).
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Stack técnico
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Next.js 16 (App Router)
+- TypeScript
+- MongoDB con Mongoose
+- NextAuth
+- pdfmake
+- Cloudinary
+- Tailwind CSS
+- Zod
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Estructura general
 
-## Learn More
+- src/app: rutas web y endpoints API.
+- src/backend: lógica de negocio, servicios, modelos y controladores.
+- src/components: componentes de interfaz.
+- src/lib: utilidades compartidas de app y auth.
 
-To learn more about Next.js, take a look at the following resources:
+## Requisitos
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Node.js 20 o superior
+- MongoDB accesible
+- Cuenta de Cloudinary
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Configuración de entorno
 
-## Deploy on Vercel
+Crea un archivo .env con valores similares:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
-## Cloudinary (Firmas y Sellos)
-
-Para guardar firmas y sellos en Cloudinary (PNG), define estas variables en `.env`:
-
-```env
-CLOUDINARY_CLOUD_NAME=your-cloud-name
-CLOUDINARY_API_KEY=your-api-key
-CLOUDINARY_API_SECRET=your-api-secret
-CLOUDINARY_UPLOAD_FOLDER=fiscalsnap
-```
+- NODE_ENV=development
+- MONGODB_URI=tu_uri_mongodb
+- OCR_PROVIDER=tesseract
+- CLOUDINARY_CLOUD_NAME=tu_cloud_name
+- CLOUDINARY_API_KEY=tu_api_key
+- CLOUDINARY_API_SECRET=tu_api_secret
+- CLOUDINARY_UPLOAD_FOLDER=fiscalsnap
+- ENABLE_SELF_REGISTRATION=true
 
 Notas:
-- Solo se permiten archivos PNG desde la pantalla de empresa.
-- El endpoint de subida está protegido y requiere rol `admin`.
-- Si dibujas la firma en canvas, al guardar también se sube automáticamente a Cloudinary.
+
+- ENABLE_SELF_REGISTRATION controla si el registro público de nuevas empresas está habilitado.
+- La firma se guarda como referencia de asset (public id), no como URL pública fija.
+
+## Instalación
+
+1. Instala dependencias
+
+	npm install
+
+2. Inicia en desarrollo
+
+	npm run dev
+
+3. Abre la aplicación
+
+	http://localhost:3000
+
+## Scripts
+
+- npm run dev: desarrollo
+- npm run dev:turbo: desarrollo con Turbopack
+- npm run build: compilación de producción
+- npm run start: servidor en producción
+- npm run lint: validación estática
+- npm run db:init: inicialización base de colecciones
+
+## Seguridad aplicada
+
+- Control de acceso por sesión y roles en endpoints.
+- Registro público activable o desactivable por variable de entorno.
+- Subida de firma vía backend autenticado.
+- Uso de URL firmada para mostrar imágenes privadas.
+- Manejo de errores de validación con respuestas controladas.
+
+## Flujo de firma empresarial
+
+1. El administrador carga o reemplaza la firma en Dashboard, sección Company.
+2. La imagen se sube a Cloudinary en modo autenticado.
+3. En base de datos se almacena la referencia del asset.
+4. El PDF usa la firma vigente del tenant en tiempo de generación.
+
+## Estado funcional actual
+
+- Registro y login por empresa.
+- Gestión de proveedores y retenciones.
+- Emisión y descarga de comprobante PDF.
+- Configuración de empresa y firma.
+- Edición de templates PDF con revisiones.

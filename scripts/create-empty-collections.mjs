@@ -55,13 +55,14 @@ async function main() {
   const envFile = readEnvFile(path.join(cwd, ".env"));
 
   const mongoUri = process.env.MONGODB_URI || envFile.MONGODB_URI;
-  const dbName = process.env.MONGODB_DB || envFile.MONGODB_DB || "FiscalSnap";
+  const dbName = process.env.MONGODB_DB || envFile.MONGODB_DB;
 
   if (!mongoUri) {
     throw new Error("MONGODB_URI no esta definido en variables de entorno ni en .env");
   }
 
-  await mongoose.connect(mongoUri, { dbName });
+  const connectOptions = dbName ? { dbName } : undefined;
+  await mongoose.connect(mongoUri, connectOptions);
   const db = mongoose.connection.db;
 
   const definitions = [

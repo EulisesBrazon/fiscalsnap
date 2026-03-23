@@ -24,7 +24,6 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
     mongoose.set("strictQuery", true);
 
     cache.promise = mongoose.connect(getRequiredMongoUri(), {
-      dbName: "FiscalSnap",
       autoIndex: env.NODE_ENV !== "production",
     });
   }

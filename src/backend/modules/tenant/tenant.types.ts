@@ -13,6 +13,18 @@ export interface StampData {
   image: string;
 }
 
+export interface TenantThemeColors {
+  primary: string;
+  secondary: string;
+  accent: string;
+  neutral: string;
+}
+
+export interface TenantUiTheme {
+  mode: "light" | "dark";
+  colors: TenantThemeColors;
+}
+
 export interface CreateTenantDto {
   name: string;
   rif: string;
@@ -22,6 +34,7 @@ export interface CreateTenantDto {
 export interface UpdateTenantDto {
   name?: string;
   fiscalAddress?: string;
-  signature?: SignatureData;
-  stamp?: StampData;
+  signature?: SignatureData | null;
+  stamp?: StampData | null;
+  uiTheme?: TenantUiTheme;
 }

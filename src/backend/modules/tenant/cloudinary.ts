@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { v2 as cloudinary } from "cloudinary";
 
 import { env } from "@/backend/config/env";
 
@@ -21,7 +22,39 @@ function getCloudinaryConfig() {
     throw new Error("Cloudinary no está configurado. Define CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET.");
   }
 
+  cloudinary.config({
+    cloud_name: cloudName,
+    api_key: apiKey,
+    api_secret: apiSecret,
+    secure: true,
+    urlAnalytics: false,
+  });
+
   return { cloudName, apiKey, apiSecret, folder };
+}
+
+function isHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
+export function buildSignedTenantAssetUrl(assetRef: string): string {
+  const trimmed = assetRef.trim();
+  if (!trimmed) return "";
+  if (isHttpUrl(trimmed)) return trimmed;
+
+  try {
+    getCloudinaryConfig();
+
+    return cloudinary.url(trimmed, {
+      secure: true,
+      resource_type: "image",
+      type: "authenticated",
+      sign_url: true,
+      analytics: false,
+    });
+  } catch {
+    return "";
+  }
 }
 
 function signUpload(params: Record<string, string>, apiSecret: string): string {
@@ -37,6 +70,7 @@ export async function uploadPngToCloudinary(input: {
   bytes: Uint8Array;
   tenantId: string;
   assetKind: "signature" | "stamp";
+  mimeType?: "image/png" | "image/jpeg" | "image/jpg";
 }): Promise<CloudinaryUploadResult> {
   const { cloudName, apiKey, apiSecret, folder } = getCloudinaryConfig();
   const timestamp = Math.floor(Date.now() / 1000).toString();
@@ -46,17 +80,20 @@ export async function uploadPngToCloudinary(input: {
   const paramsToSign = {
     folder: uploadFolder,
     public_id: publicId,
+    type: "authenticated",
     timestamp,
   };
 
   const signature = signUpload(paramsToSign, apiSecret);
 
-  const fileDataUri = `data:image/png;base64,${Buffer.from(input.bytes).toString("base64")}`;
+  const mimeType = input.mimeType ?? "image/png";
+  const fileDataUri = `data:${mimeType};base64,${Buffer.from(input.bytes).toString("base64")}`;
 
   const formData = new FormData();
   formData.append("file", fileDataUri);
   formData.append("folder", uploadFolder);
   formData.append("public_id", publicId);
+  formData.append("type", "authenticated");
   formData.append("timestamp", timestamp);
   formData.append("api_key", apiKey);
   formData.append("signature", signature);
@@ -69,6 +106,7 @@ export async function uploadPngToCloudinary(input: {
   const payload = (await response.json()) as {
     secure_url?: string;
     public_id?: string;
+    version?: number;
     format?: string;
     bytes?: number;
     width?: number;
@@ -81,7 +119,7 @@ export async function uploadPngToCloudinary(input: {
   }
 
   return {
-    secureUrl: payload.secure_url,
+    secureUrl: buildSignedTenantAssetUrl(payload.public_id),
     publicId: payload.public_id,
     format: payload.format,
     bytes: payload.bytes,
@@ -95,15 +133,18 @@ export async function uploadPngDataUriToCloudinary(input: {
   tenantId: string;
   assetKind: "signature" | "stamp";
 }): Promise<CloudinaryUploadResult> {
-  const match = input.dataUri.match(/^data:image\/png;base64,(.+)$/i);
+  const match = input.dataUri.match(/^data:image\/(png|jpe?g);base64,(.+)$/i);
   if (!match) {
-    throw new Error("Formato de imagen inválido. Se esperaba un PNG en base64.");
+    throw new Error("Formato de imagen inválido. Se esperaba PNG, JPG o JPEG en base64.");
   }
 
-  const bytes = new Uint8Array(Buffer.from(match[1], "base64"));
+  const bytes = new Uint8Array(Buffer.from(match[2], "base64"));
+  const extension = match[1].toLowerCase();
+  const mimeType = extension === "png" ? "image/png" : "image/jpeg";
   return uploadPngToCloudinary({
     bytes,
     tenantId: input.tenantId,
     assetKind: input.assetKind,
+    mimeType,
   });
 }

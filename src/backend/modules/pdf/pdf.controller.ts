@@ -19,7 +19,8 @@ export async function getRetentionPdfController(tenantId: string, retentionId: s
       return Response.json({ message: error.message }, { status: error.statusCode });
     }
 
-    return Response.json({ message: "Error interno del servidor" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Error interno del servidor";
+    return Response.json({ message }, { status: 500 });
   }
 }
 
@@ -40,6 +41,7 @@ export async function getTemplatePreviewPdfController(tenantId: string, template
       return Response.json({ message: error.message }, { status: error.statusCode });
     }
 
-    return Response.json({ message: "Error interno del servidor" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Error interno del servidor";
+    return Response.json({ message }, { status: 500 });
   }
 }

@@ -14,6 +14,15 @@ class TenantService {
       name: input.name.trim(),
       rif: normalizeRif(input.rif),
       fiscalAddress: input.fiscalAddress.trim(),
+      uiTheme: {
+        mode: "dark",
+        colors: {
+          primary: "#4F4BD8",
+          secondary: "#1F1B1F",
+          accent: "#7A80A3",
+          neutral: "#E7E9F5",
+        },
+      },
       retentionCounter: {
         year: now.getFullYear(),
         month: now.getMonth() + 1,
@@ -55,11 +64,24 @@ class TenantService {
     }
 
     if (input.signature !== undefined) {
-      tenant.signature = input.signature;
+      if (input.signature === null) {
+        tenant.set("signature.image", undefined);
+        tenant.set("signature.type", undefined);
+      } else {
+        tenant.signature = input.signature;
+      }
     }
 
     if (input.stamp !== undefined) {
-      tenant.stamp = input.stamp;
+      if (input.stamp === null) {
+        tenant.set("stamp.image", undefined);
+      } else {
+        tenant.stamp = input.stamp;
+      }
+    }
+
+    if (input.uiTheme !== undefined) {
+      tenant.uiTheme = input.uiTheme;
     }
 
     await tenant.save();

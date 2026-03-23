@@ -6,6 +6,8 @@ import { UserRole } from "@/backend/shared/types";
 import { getTenantSession, hasRequiredRole } from "@/lib/authz";
 
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/jpg"]);
+type AllowedImageType = "image/png" | "image/jpeg" | "image/jpg";
 
 export async function POST(request: Request) {
   try {
@@ -27,11 +29,11 @@ export async function POST(request: Request) {
     const assetKind = assetKindRaw === "stamp" ? "stamp" : "signature";
 
     if (!(file instanceof File)) {
-      return NextResponse.json({ message: "Debes enviar un archivo PNG" }, { status: 400 });
+      return NextResponse.json({ message: "Debes enviar una imagen (PNG, JPG o JPEG)" }, { status: 400 });
     }
 
-    if (file.type !== "image/png") {
-      return NextResponse.json({ message: "Solo se permiten imágenes PNG" }, { status: 400 });
+    if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+      return NextResponse.json({ message: "Solo se permiten imágenes PNG, JPG o JPEG" }, { status: 400 });
     }
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -39,16 +41,19 @@ export async function POST(request: Request) {
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
+    const mimeType = file.type as AllowedImageType;
 
     const uploaded = await uploadPngToCloudinary({
       bytes,
       tenantId,
       assetKind,
+      mimeType,
     });
 
     return NextResponse.json({
       data: {
         url: uploaded.secureUrl,
+        assetRef: uploaded.publicId,
         publicId: uploaded.publicId,
         format: uploaded.format,
         bytes: uploaded.bytes,

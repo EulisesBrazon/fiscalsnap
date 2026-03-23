@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
 import { getApiErrorMessage } from "@/lib/api-errors";
 
@@ -13,6 +13,7 @@ type ImageUploadProps = {
 };
 
 export function ImageUpload({ label, onChange, initialImage, disabled = false, assetKind = "signature" }: ImageUploadProps) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [preview, setPreview] = useState(initialImage ?? "");
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
@@ -21,8 +22,9 @@ export function ImageUpload({ label, onChange, initialImage, disabled = false, a
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (file.type !== "image/png") {
-      setMessage("Solo se permiten archivos PNG.");
+    const allowedTypes = new Set(["image/png", "image/jpeg", "image/jpg"]);
+    if (!allowedTypes.has(file.type)) {
+      setMessage("Solo se permiten archivos PNG, JPG o JPEG.");
       return;
     }
 
@@ -39,7 +41,7 @@ export function ImageUpload({ label, onChange, initialImage, disabled = false, a
     });
 
     const payload = (await response.json()) as {
-      data?: { url?: string };
+      data?: { url?: string; assetRef?: string };
       message?: string;
       errors?: Record<string, string[]>;
     };
@@ -51,7 +53,7 @@ export function ImageUpload({ label, onChange, initialImage, disabled = false, a
     }
 
     setPreview(payload.data.url);
-    onChange(payload.data.url);
+    onChange(payload.data.assetRef ?? payload.data.url);
     setMessage("Imagen subida correctamente.");
     setUploading(false);
   }
@@ -59,7 +61,27 @@ export function ImageUpload({ label, onChange, initialImage, disabled = false, a
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium">{label}</label>
-      <input disabled={disabled || uploading} type="file" accept="image/png" onChange={handleFile} className="block w-full text-sm disabled:opacity-60" />
+
+      <input
+        ref={fileInputRef}
+        disabled={disabled || uploading}
+        type="file"
+        accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+        onChange={handleFile}
+        className="sr-only"
+      />
+
+      <button
+        type="button"
+        disabled={disabled || uploading}
+        onClick={() => fileInputRef.current?.click()}
+        className="h-9 rounded-md border px-3 text-sm disabled:opacity-60"
+      >
+        {uploading ? "Subiendo..." : preview ? `Reemplazar ${label.toLowerCase()}` : `Subir ${label.toLowerCase()}`}
+      </button>
+
+      <p className="text-xs text-muted-foreground">Formatos permitidos: PNG, JPG o JPEG (máximo 2MB).</p>
+
       {preview ? (
         <Image
           src={preview}

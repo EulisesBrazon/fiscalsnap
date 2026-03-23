@@ -11,6 +11,19 @@ type SignatureCanvasProps = {
 export function SignatureCanvas({ onChange, initialImage, disabled = false }: SignatureCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [drawing, setDrawing] = useState(false);
+  const [warning, setWarning] = useState("");
+
+  function exportCanvas(canvas: HTMLCanvasElement) {
+    try {
+      const dataUrl = canvas.toDataURL("image/png");
+      onChange(dataUrl);
+      if (warning) setWarning("");
+    } catch {
+      setWarning(
+        "No se pudo exportar la firma actual por restricciones del navegador. Dibuja nuevamente la firma para guardarla.",
+      );
+    }
+  }
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -27,8 +40,19 @@ export function SignatureCanvas({ onChange, initialImage, disabled = false }: Si
 
     if (initialImage) {
       const image = new Image();
+
+      // Prevent browser security errors when trying to export a canvas that drew a cross-origin image.
+      if (!initialImage.startsWith("data:image/")) {
+        image.crossOrigin = "anonymous";
+      }
+
       image.onload = () => {
         ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      };
+      image.onerror = () => {
+        setWarning(
+          "No se pudo cargar la firma previa en el lienzo. Puedes dibujar una nueva firma y guardarla.",
+        );
       };
       image.src = initialImage;
     }
@@ -80,7 +104,7 @@ export function SignatureCanvas({ onChange, initialImage, disabled = false }: Si
     const canvas = canvasRef.current;
     if (!canvas) return;
     setDrawing(false);
-    onChange(canvas.toDataURL("image/png"));
+    exportCanvas(canvas);
   }
 
   function clearCanvas() {
@@ -92,7 +116,7 @@ export function SignatureCanvas({ onChange, initialImage, disabled = false }: Si
 
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    onChange(canvas.toDataURL("image/png"));
+    exportCanvas(canvas);
   }
 
   return (
@@ -113,6 +137,7 @@ export function SignatureCanvas({ onChange, initialImage, disabled = false }: Si
       <button disabled={disabled} type="button" onClick={clearCanvas} className="h-9 rounded-md border px-3 text-sm disabled:opacity-60">
         Limpiar firma
       </button>
+      {warning ? <p className="text-xs text-amber-600">{warning}</p> : null}
     </div>
   );
 }

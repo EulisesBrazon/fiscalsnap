@@ -14,6 +14,15 @@ const tenantSchema = new Schema(
     stamp: {
       image: { type: String },
     },
+    uiTheme: {
+      mode: { type: String, enum: ["light", "dark"], default: "dark" },
+      colors: {
+        primary: { type: String, trim: true, default: "#4F4BD8" },
+        secondary: { type: String, trim: true, default: "#1F1B1F" },
+        accent: { type: String, trim: true, default: "#7A80A3" },
+        neutral: { type: String, trim: true, default: "#E7E9F5" },
+      },
+    },
     retentionCounter: {
       year: { type: Number, required: true },
       month: { type: Number, required: true },

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { isSelfRegistrationEnabled } from "@/backend/config/env";
 import { AppError, isAppError } from "@/backend/shared/errors";
 import { emailSchema, rifSchema } from "@/backend/shared/validation";
 
@@ -17,6 +18,10 @@ const registerSchema = z.object({
 
 export async function registerAdminController(payload: unknown) {
   try {
+    if (!isSelfRegistrationEnabled()) {
+      throw new AppError("El registro de nuevas cuentas está deshabilitado por configuración.", 403);
+    }
+
     const input = registerSchema.parse(payload);
     const result = await authService.registerAdmin(input);
 

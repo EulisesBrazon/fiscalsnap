@@ -32,7 +32,7 @@ export const exclusiveLandscapeRetentionTemplate: PdfTemplateDefinition = {
   name: "Comprobante Retención IVA",
   description: "Template horizontal fiscal — Comprobante de Retención IVA (SENIAT)",
   definition: {
-    info: { subject: "fiscalsnap-seed-v46" },
+    info: { subject: "fiscalsnap-seed-v51" },
     pageSize: "LETTER",
     pageOrientation: "landscape",
     pageMargins: [28, 30, 28, 20],
@@ -131,7 +131,7 @@ export const exclusiveLandscapeRetentionTemplate: PdfTemplateDefinition = {
       {
         table: {
           headerRows: 1,
-          widths: [54, 50, 54, 38, 30, 35, 51, 51, 55, 49, 27, 35, 47, 47],
+          widths: [54, 50, 54, 38, 30, 35, 51, 51, 55, 49, 28, 35, 47, 46],
           body: [
             [
               { text: "Fecha del\nDocumento", style: "tableHeader" },

@@ -25,7 +25,13 @@ export default async function RetentionDetailPage({ params }: { params: Promise<
 
     return (
       <main className="space-y-4">
-        <section className="rounded-xl border bg-card p-4">
+        <section className="relative rounded-xl border bg-card p-4">
+          {retention.status !== "voided" && [UserRole.ADMIN, UserRole.SUPERVISOR].includes(userRole as UserRole) ? (
+            <div className="absolute right-4 top-4">
+              <RetentionVoidAction retentionId={id} />
+            </div>
+          ) : null}
+
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-lg font-semibold">Comprobante {retention.voucherNumber}</h1>
@@ -50,11 +56,6 @@ export default async function RetentionDetailPage({ params }: { params: Promise<
             </div>
           ) : null}
 
-          {retention.status !== "voided" && [UserRole.ADMIN, UserRole.SUPERVISOR].includes(userRole as UserRole) ? (
-            <div className="mt-3">
-              <RetentionVoidAction retentionId={id} />
-            </div>
-          ) : null}
         </section>
 
         <section className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2">

@@ -5,6 +5,7 @@ import type { TDocumentDefinitions } from "pdfmake/interfaces";
 import { AppError } from "@/backend/shared/errors";
 import { TenantModel } from "@/backend/modules/tenant/tenant.model";
 import { RetentionModel } from "@/backend/modules/retention/retention.model";
+import { buildSignedTenantAssetUrl } from "@/backend/modules/tenant/cloudinary";
 
 import { templateService } from "./template.service";
 
@@ -18,15 +19,18 @@ const pdfMakeClient = pdfMake as unknown as {
   };
 };
 
-const fontSource = pdfFonts as unknown as {
-  [key: string]: string | undefined;
-  vfs?: Record<string, string>;
-  pdfMake?: { vfs: Record<string, string> };
-};
+const fontSource = pdfFonts as unknown as Record<string, unknown>;
+
+const nestedPdfMakeVfs =
+  typeof fontSource.pdfMake === "object" && fontSource.pdfMake !== null && "vfs" in fontSource.pdfMake
+    ? ((fontSource.pdfMake as { vfs?: unknown }).vfs as Record<string, string> | undefined)
+    : undefined;
+
+const directVfs = (fontSource.vfs as Record<string, string> | undefined) ?? undefined;
 
 const resolvedVfs =
-  fontSource.pdfMake?.vfs ??
-  fontSource.vfs ??
+  nestedPdfMakeVfs ??
+  directVfs ??
   Object.fromEntries(
     Object.entries(fontSource).filter(
       ([, value]) => typeof value === "string",
@@ -65,7 +69,7 @@ function replaceVariables(value: unknown, variables: Record<string, string>): un
       .filter((entry) => {
         if (entry && typeof entry === "object" && "image" in entry) {
           const node = entry as Record<string, unknown>;
-          if (!node.image && node._removable) return false;
+          if (!node.image) return false;
         }
         return true;
       });
@@ -75,6 +79,11 @@ function replaceVariables(value: unknown, variables: Record<string, string>): un
     const result = Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, replaceVariables(v, variables)]),
     );
+
+    if ("image" in result && !result.image) {
+      return "";
+    }
+
     delete result._removable;
     return result;
   }
@@ -83,6 +92,40 @@ function replaceVariables(value: unknown, variables: Record<string, string>): un
 }
 
 class PdfService {
+  private async resolveTenantImage(assetRef?: string): Promise<string> {
+    if (!assetRef) return "";
+
+    try {
+      return await this.toPdfImageSource(buildSignedTenantAssetUrl(assetRef));
+    } catch {
+      return "";
+    }
+  }
+
+  private stripCustomLayouts(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map((entry) => this.stripCustomLayouts(entry));
+    }
+
+    if (value && typeof value === "object") {
+      const input = value as Record<string, unknown>;
+      const output: Record<string, unknown> = {};
+
+      for (const [key, entryValue] of Object.entries(input)) {
+        // Some saved templates may contain malformed layout objects that break preview rendering.
+        if (key === "layout" && entryValue && typeof entryValue === "object") {
+          continue;
+        }
+
+        output[key] = this.stripCustomLayouts(entryValue);
+      }
+
+      return output;
+    }
+
+    return value;
+  }
+
   private toCurrency(value: number): string {
     return new Intl.NumberFormat("en-US", {
       minimumFractionDigits: 2,
@@ -149,8 +192,9 @@ class PdfService {
 
     const issueDate = new Date();
     const totalPurchases = retention.taxBase + retention.ivaAmount;
-    const signatureImage = await this.toPdfImageSource(tenant.signature?.image ?? "");
-    const stampImage = await this.toPdfImageSource(tenant.stamp?.image ?? "");
+    const signatureImage = await this.resolveTenantImage(tenant.signature?.image);
+    // Keep legacy template compatibility: use current signature in both placeholders.
+    const stampImage = signatureImage;
 
     const values: Record<string, string> = {
       agentName: tenant.name,
@@ -198,11 +242,19 @@ class PdfService {
 
   async generateTemplatePreview(tenantId: string, templateId: string) {
     const template = await templateService.getById(tenantId, templateId);
+    const tenant = await TenantModel.findOne({ _id: tenantId, isActive: true });
+    if (!tenant) {
+      throw new AppError("Empresa no encontrada", 404);
+    }
+
+    const signatureImage = await this.resolveTenantImage(tenant.signature?.image);
+    // Keep legacy template compatibility: use current signature in both placeholders.
+    const stampImage = signatureImage;
 
     const mockValues: Record<string, string> = {
-      agentName: "SERVIAUTOS BAEZ, C.A.",
-      agentRif: "J-50578995-3",
-      agentAddress: "Av. Principal, Caracas",
+      agentName: tenant.name,
+      agentRif: tenant.rif,
+      agentAddress: tenant.fiscalAddress,
       providerName: "MULTI MANGUERAS, C.A.",
       providerRif: "J-12345678-9",
       voucherNumber: "202603000123",
@@ -222,8 +274,8 @@ class PdfService {
       affectedInvoiceNumber: "",
       transactionType: "01-Reg",
       fiscalPeriod: "2026-03",
-      signatureImage: "",
-      stampImage: "",
+      signatureImage,
+      stampImage,
       issueDate: "2026-03-21",
       issueDateDisplay: "21/03/2026",
     };
@@ -234,7 +286,32 @@ class PdfService {
       font: "Roboto",
     };
 
-    const buffer = await this.toBuffer(definition);
+    let buffer: Buffer;
+
+    try {
+      buffer = await this.toBuffer(definition);
+    } catch (firstError) {
+      const sanitizedDefinition = this.stripCustomLayouts(definition) as TDocumentDefinitions;
+      sanitizedDefinition.defaultStyle = {
+        ...(sanitizedDefinition.defaultStyle ?? {}),
+        font: "Roboto",
+      };
+
+      try {
+        buffer = await this.toBuffer(sanitizedDefinition);
+      } catch (secondError) {
+        console.error("Template preview failed", {
+          tenantId,
+          templateId,
+          firstError,
+          secondError,
+        });
+        throw new AppError(
+          "La definición del template no es válida para previsualización. Revisa tablas, columnas y layout.",
+          400,
+        );
+      }
+    }
 
     return {
       buffer,

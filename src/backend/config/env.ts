@@ -10,6 +10,7 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().min(1).optional(),
   CLOUDINARY_API_SECRET: z.string().min(1).optional(),
   CLOUDINARY_UPLOAD_FOLDER: z.string().min(1).default("fiscalsnap"),
+  ENABLE_SELF_REGISTRATION: z.enum(["true", "false"]).default("true"),
 });
 
 export const env = envSchema.parse(process.env);
@@ -22,6 +23,10 @@ export function getRequiredMongoUri(): string {
   }
 
   return mongoUri;
+}
+
+export function isSelfRegistrationEnabled(): boolean {
+  return env.ENABLE_SELF_REGISTRATION === "true";
 }
 
 export type AppEnv = z.infer<typeof envSchema>;

@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 
 import { ImageUpload } from "@/components/signature/image-upload";
-import { SignatureCanvas } from "@/components/signature/signature-canvas";
 import { getApiErrorMessage } from "@/lib/api-errors";
 
 type CompanyResponse = {
@@ -11,12 +10,18 @@ type CompanyResponse = {
   name: string;
   rif: string;
   fiscalAddress: string;
+  uiTheme?: {
+    mode?: "light" | "dark";
+    colors?: {
+      primary?: string;
+      secondary?: string;
+      accent?: string;
+      neutral?: string;
+    };
+  };
   signature?: {
     image?: string;
     type?: "upload" | "canvas";
-  };
-  stamp?: {
-    image?: string;
   };
 };
 
@@ -32,9 +37,12 @@ export function CompanySettingsClient({ canEdit }: CompanySettingsClientProps) {
   const [name, setName] = useState("");
   const [rif, setRif] = useState("");
   const [fiscalAddress, setFiscalAddress] = useState("");
+  const [themeMode, setThemeMode] = useState<"light" | "dark">("dark");
+  const [themePrimary, setThemePrimary] = useState("#4F4BD8");
+  const [themeSecondary, setThemeSecondary] = useState("#1F1B1F");
+  const [themeAccent, setThemeAccent] = useState("#7A80A3");
+  const [themeNeutral, setThemeNeutral] = useState("#E7E9F5");
   const [signatureImage, setSignatureImage] = useState("");
-  const [signatureType, setSignatureType] = useState<"upload" | "canvas">("upload");
-  const [stampImage, setStampImage] = useState("");
 
   useEffect(() => {
     async function loadData() {
@@ -50,9 +58,12 @@ export function CompanySettingsClient({ canEdit }: CompanySettingsClientProps) {
       setName(payload.data.name);
       setRif(payload.data.rif);
       setFiscalAddress(payload.data.fiscalAddress);
+      setThemeMode(payload.data.uiTheme?.mode === "light" ? "light" : "dark");
+      setThemePrimary(payload.data.uiTheme?.colors?.primary ?? "#4F4BD8");
+      setThemeSecondary(payload.data.uiTheme?.colors?.secondary ?? "#1F1B1F");
+      setThemeAccent(payload.data.uiTheme?.colors?.accent ?? "#7A80A3");
+      setThemeNeutral(payload.data.uiTheme?.colors?.neutral ?? "#E7E9F5");
       setSignatureImage(payload.data.signature?.image ?? "");
-      setSignatureType(payload.data.signature?.type ?? "upload");
-      setStampImage(payload.data.stamp?.image ?? "");
       setLoading(false);
     }
 
@@ -74,17 +85,22 @@ export function CompanySettingsClient({ canEdit }: CompanySettingsClientProps) {
       body: JSON.stringify({
         name,
         fiscalAddress,
+        uiTheme: {
+          mode: themeMode,
+          colors: {
+            primary: themePrimary,
+            secondary: themeSecondary,
+            accent: themeAccent,
+            neutral: themeNeutral,
+          },
+        },
         signature: signatureImage
           ? {
               image: signatureImage,
-              type: signatureType,
+              type: "upload",
             }
-          : undefined,
-        stamp: stampImage
-          ? {
-              image: stampImage,
-            }
-          : undefined,
+          : null,
+        stamp: null,
       }),
     });
 
@@ -133,25 +149,55 @@ export function CompanySettingsClient({ canEdit }: CompanySettingsClientProps) {
           </div>
         </div>
 
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Modo de firma</p>
-          <div className="flex gap-2">
-            <button disabled={!canEdit} type="button" onClick={() => setSignatureType("upload")} className={`h-9 rounded-md border px-3 text-sm ${signatureType === "upload" ? "bg-accent" : ""} disabled:opacity-60`}>
-              Subir imagen
-            </button>
-            <button disabled={!canEdit} type="button" onClick={() => setSignatureType("canvas")} className={`h-9 rounded-md border px-3 text-sm ${signatureType === "canvas" ? "bg-accent" : ""} disabled:opacity-60`}>
-              Dibujar
-            </button>
+        <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+          <div>
+            <p className="text-sm font-medium">Tema de interfaz por empresa</p>
+            <p className="text-xs text-muted-foreground">Estos colores se aplican a la interfaz web del tenant (el PDF no se altera).</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Modo preferido</label>
+            <select
+              disabled={!canEdit}
+              value={themeMode}
+              onChange={(event) => setThemeMode(event.target.value === "light" ? "light" : "dark")}
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm disabled:opacity-60"
+            >
+              <option value="dark">Oscuro</option>
+              <option value="light">Claro</option>
+            </select>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Color primario</label>
+              <input disabled={!canEdit} type="color" value={themePrimary} onChange={(event) => setThemePrimary(event.target.value.toUpperCase())} className="h-10 w-full rounded-md border bg-background p-1 disabled:opacity-60" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Color secundario</label>
+              <input disabled={!canEdit} type="color" value={themeSecondary} onChange={(event) => setThemeSecondary(event.target.value.toUpperCase())} className="h-10 w-full rounded-md border bg-background p-1 disabled:opacity-60" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Color acento</label>
+              <input disabled={!canEdit} type="color" value={themeAccent} onChange={(event) => setThemeAccent(event.target.value.toUpperCase())} className="h-10 w-full rounded-md border bg-background p-1 disabled:opacity-60" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Color neutro</label>
+              <input disabled={!canEdit} type="color" value={themeNeutral} onChange={(event) => setThemeNeutral(event.target.value.toUpperCase())} className="h-10 w-full rounded-md border bg-background p-1 disabled:opacity-60" />
+            </div>
           </div>
         </div>
 
-        {signatureType === "upload" ? (
-          <ImageUpload disabled={!canEdit} label="Firma" assetKind="signature" initialImage={signatureImage} onChange={(value) => setSignatureImage(value)} />
-        ) : (
-          <SignatureCanvas disabled={!canEdit} initialImage={signatureImage} onChange={(value) => setSignatureImage(value)} />
-        )}
+        <ImageUpload disabled={!canEdit} label="Firma" assetKind="signature" initialImage={signatureImage} onChange={(value) => setSignatureImage(value)} />
 
-        <ImageUpload disabled={!canEdit} label="Sello" assetKind="stamp" initialImage={stampImage} onChange={(value) => setStampImage(value)} />
+        <button
+          disabled={!canEdit || !signatureImage}
+          type="button"
+          onClick={() => setSignatureImage("")}
+          className="h-9 rounded-md border px-3 text-sm disabled:opacity-60"
+        >
+          Limpiar firma
+        </button>
 
         <button disabled={saving || !canEdit} onClick={saveCompany} type="button" className="h-10 w-full rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60">
           {saving ? "Guardando..." : "Guardar cambios"}

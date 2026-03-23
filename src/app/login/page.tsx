@@ -1,9 +1,21 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AuthError } from "next-auth";
 
+import { isSelfRegistrationEnabled } from "@/backend/config/env";
 import { auth, signIn } from "@/lib/auth";
 
-export default async function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Promise<{ error?: string }> | { error?: string };
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const resolvedSearchParams =
+    searchParams && "then" in searchParams ? await searchParams : searchParams;
+
+  const authError = resolvedSearchParams?.error;
+  const registrationEnabled = isSelfRegistrationEnabled();
+
   const session = await auth();
   if (session?.user?.tenantId) {
     redirect("/dashboard");
@@ -16,12 +28,20 @@ export default async function LoginPage() {
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
 
-    await signIn("credentials", {
-      tenantRif,
-      email,
-      password,
-      redirectTo: "/dashboard",
-    });
+    try {
+      await signIn("credentials", {
+        tenantRif,
+        email,
+        password,
+        redirectTo: "/dashboard",
+      });
+    } catch (error) {
+      if (error instanceof AuthError && error.type === "CredentialsSignin") {
+        redirect("/login?error=credenciales");
+      }
+
+      throw error;
+    }
   }
 
   return (
@@ -32,6 +52,12 @@ export default async function LoginPage() {
       </div>
 
       <form action={loginAction} className="space-y-4 rounded-xl border bg-card p-5 shadow-sm">
+        {authError === "credenciales" ? (
+          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            Credenciales inválidas. Verifica RIF, email y clave.
+          </p>
+        ) : null}
+
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor="tenantRif">
             RIF de la empresa
@@ -58,12 +84,14 @@ export default async function LoginPage() {
         </button>
       </form>
 
-      <p className="mt-5 text-center text-sm text-muted-foreground">
-        ¿Primera vez?{" "}
-        <Link href="/register" className="font-medium text-foreground underline underline-offset-4">
-          Crea tu cuenta
-        </Link>
-      </p>
+      {registrationEnabled ? (
+        <p className="mt-5 text-center text-sm text-muted-foreground">
+          ¿Primera vez?{" "}
+          <Link href="/register" className="font-medium text-foreground underline underline-offset-4">
+            Crea tu cuenta
+          </Link>
+        </p>
+      ) : null}
     </main>
   );
 }

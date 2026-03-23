@@ -7,7 +7,7 @@ import { PdfTemplateModel } from "./template.model";
 import { TemplateRevisionModel } from "./template-revision.model";
 import type { PdfTemplateDefinition } from "./pdf.types";
 
-const EXCLUSIVE_LANDSCAPE_TEMPLATE_TENANT_ID = "69c0174c26cc9a9a1685b10d";
+const EXCLUSIVE_LANDSCAPE_TEMPLATE_TENANT_ID = "69c098207b9c44a9376b2b7b";
 
 class TemplateService {
   private getSeedTemplateForTenant(tenantId: string): PdfTemplateDefinition {
